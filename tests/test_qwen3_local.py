@@ -112,3 +112,20 @@ def test_sherpa_missing_message_mentions_install() -> None:
     assert "sherpa-onnx" in message
     assert "pacman" in message
     assert "silero_vad.onnx" in message
+
+
+def test_empty_result_message_distinguishes_silence_from_format_change() -> None:
+    """没人声(纯音乐)和"格式变了"必须给出不同的指引,不能一律"没有文本"。"""
+    from b2t.transcribers.qwen3_local import build_empty_result_message
+
+    ran_but_silent = (
+        "Creating recognizer ...\nRecognizer created!\nStarted\n"
+        "Reading: a.wav\nStarted!\nnum threads: 8\n"
+        "Elapsed seconds: 0.806 s\nReal time factor (RTF): 0.806 / 212.309 = 0.004\n"
+    )
+    message = build_empty_result_message(ran_but_silent)
+    assert "人声" in message
+    assert "VAD" in message
+
+    changed_format = build_empty_result_message("totally unexpected output")
+    assert "输出格式" in changed_format

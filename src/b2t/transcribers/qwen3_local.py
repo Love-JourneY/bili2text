@@ -101,15 +101,12 @@ class Qwen3LocalTranscriber(Transcriber):
 
         segments = parse_segments(completed.stdout) or parse_segments(completed.stderr)
         if not segments:
-            raise RuntimeError(
-                "Qwen3-ASR 没有产出任何文本。sherpa-onnx 输出格式可能变了,"
-                f"原始尾部:{(completed.stdout or completed.stderr or '')[-300:]!r}"
-            )
+            raise RuntimeError(build_empty_result_message(completed.stderr, completed.stdout))
 
         self._segments = segments
         text = join_segments(segments)
         if not text.strip():
-            raise RuntimeError("transcriber returned an empty transcript")
+            raise RuntimeError(build_empty_result_message(completed.stderr, completed.stdout))
 
         return {
             "text": text,
@@ -202,6 +199,30 @@ def parse_segments(raw: str | None) -> list[dict[str, Any]]:
 def join_segments(segments: list[dict[str, Any]]) -> str:
     """每段一行 —— 天然分段,比原来的单行大段落可读得多。"""
     return "\n".join(segment["text"] for segment in segments if segment.get("text"))
+
+
+def build_empty_result_message(stderr: str | None, stdout: str | None = None) -> str:
+    """没产出文本时,给一个**能指路**的报错,而不是一句"没有文本"。
+
+    最常见的原因是音频里根本没有人声 —— VAD 会把纯音乐/歌曲整段滤掉,
+    这时 RTF 会小得可疑(接近 0),据此可以区分"格式变了"和"没人说话"。
+    """
+    combined = f"{stdout or ''}\n{stderr or ''}"
+    looked_silent = "Started!" in combined and "Real time factor" in combined
+
+    if looked_silent:
+        return (
+            "这段音频里没有被 Silero VAD 判定为人声的内容,因此没有任何文字产出。\n"
+            "  常见情形:纯音乐/歌曲 MV、只有环境音、或整段静音。\n"
+            "  若你确信其中有人说话,可以:\n"
+            "    - 调低 VAD 阈值(sherpa-onnx 的 --silero-vad-threshold)\n"
+            "    - 或改用不带 VAD 的方式(sherpa-onnx-offline)整段转写"
+        )
+
+    return (
+        "Qwen3-ASR 没有产出任何文本。sherpa-onnx 的输出格式可能变了,"
+        f"原始尾部:{combined.strip()[-300:]!r}"
+    )
 
 
 def build_sherpa_missing_message() -> str:
