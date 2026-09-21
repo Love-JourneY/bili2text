@@ -19,14 +19,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-whisper = [
-  "openai-whisper>=20240930",
-]
-sensevoice = [
-  "funasr-onnx>=0.4.0",
-  "jieba>=0.42.1",
-  "torch>=2.5.0",
-]
+# 注意:本 fork 已移除 whisper / sensevoice 两个 extra。
+# 本地转写走 Qwen3-ASR + sherpa-onnx(ONNX Runtime),不再需要 PyTorch/CUDA ——
+# 原版 whisper extra 会把整条 torch+CUDA 栈拉进来(venv 实测 4.8GB)。
+# sherpa-onnx 是**系统级依赖**(如同 ffmpeg),不在这里声明:
+#   Arch: sudo pacman -S sherpa-onnx
+#   其他: pip install sherpa-onnx
 volcengine = [
   "requests>=2.32.3",
 ]

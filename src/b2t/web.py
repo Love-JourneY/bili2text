@@ -18,16 +18,16 @@ from b2t.tasks import TaskService
 
 class TranscribeTaskRequest(BaseModel):
     source: str
-    provider: str = "whisper"
-    model: str = "small"
+    provider: str = "qwen3"
+    model: str = ""
     prompt: str = ""
 
 
 class BatchTranscribeTaskRequest(BaseModel):
     sources: list[str] | None = None
     source_text: str | None = None
-    provider: str = "whisper"
-    model: str = "small"
+    provider: str = "qwen3"
+    model: str = ""
     prompt: str = ""
 
 
@@ -50,8 +50,8 @@ def create_app(
     task_service: TaskService,
     library: WorkspaceLibrary,
     database: AppDatabase,
-    default_provider: str = "whisper",
-    default_model: str = "small",
+    default_provider: str = "qwen3",
+    default_model: str = "",
     language: str = "zh-CN",
 ) -> FastAPI:
     templates = Jinja2Templates(directory=str(Path(__file__).with_name("templates")))
@@ -80,7 +80,7 @@ def create_app(
     async def transcribe_from_form(
         request: Request,
         source: str = Form(...),
-        provider: str = Form("whisper"),
+        provider: str = Form("qwen3"),
         model: str = Form("small"),
         prompt: str = Form(""),
     ) -> HTMLResponse:

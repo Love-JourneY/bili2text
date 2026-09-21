@@ -20,7 +20,7 @@ class WindowApp:
         self,
         *,
         pipeline_factory: Callable[[str, str, Path | None], B2TPipeline],
-        default_provider: str = "whisper",
+        default_provider: str = "qwen3",
         default_model: str = "small",
         default_workspace: Path | None = None,
         language: str = "zh-CN",
@@ -66,7 +66,7 @@ class WindowApp:
         provider_box = ttk.Combobox(
             top,
             textvariable=self.provider_var,
-            values=["whisper", "sensevoice", "volcengine"],
+            values=["qwen3", "volcengine"],
             state="readonly",
         )
         provider_box.grid(row=1, column=1, sticky="ew", padx=(8, 16), pady=(10, 0))
@@ -145,7 +145,7 @@ class WindowApp:
 
         workspace_text = self.workspace_var.get().strip()
         workspace = Path(workspace_text).expanduser() if workspace_text else None
-        provider = self.provider_var.get().strip() or "whisper"
+        provider = self.provider_var.get().strip() or "qwen3"
         model = self.model_var.get().strip() or "small"
         prompt = self.prompt_text.get("1.0", "end").strip() or None
 
@@ -272,7 +272,7 @@ class WindowApp:
 def run_window(
     *,
     pipeline_factory: Callable[[str, str, Path | None], B2TPipeline],
-    default_provider: str = "whisper",
+    default_provider: str = "qwen3",
     default_model: str = "small",
     default_workspace: Path | None = None,
     language: str = "zh-CN",

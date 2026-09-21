@@ -150,14 +150,9 @@ def run_bootstrap(*, settings: Settings, interactive: bool = True) -> AppConfig:
     console.rule(f"[bold]{tr(lang, 'bootstrap_step_providers')}[/bold]")
     provider_choices = [
         {
-            "name": f"whisper    — {tr(lang, 'provider_whisper_short')}",
-            "value": "whisper",
-            "enabled": "whisper" in config.enabled_providers,
-        },
-        {
-            "name": f"sensevoice — {tr(lang, 'provider_sensevoice_short')}",
-            "value": "sensevoice",
-            "enabled": "sensevoice" in config.enabled_providers,
+            "name": f"qwen3      — {tr(lang, 'provider_qwen3_short')}",
+            "value": "qwen3",
+            "enabled": "qwen3" in config.enabled_providers,
         },
         {
             "name": f"volcengine — {tr(lang, 'provider_volcengine_short')}",
@@ -199,17 +194,14 @@ def run_bootstrap(*, settings: Settings, interactive: bool = True) -> AppConfig:
     ).execute()
 
     # ── 4. Configure each selected provider ──────────────────
-    selected_whisper_model: str | None = None
     for provider in selected_providers:
         console.print()
         console.rule(f"[bold cyan]{tr(lang, f'provider_{provider}_name')}[/bold cyan]")
         console.print(f"[dim]{tr(lang, f'provider_{provider}_desc')}[/dim]")
         console.print()
 
-        if provider == "whisper":
-            selected_whisper_model = _configure_whisper(config, lang)
-        elif provider == "sensevoice":
-            _configure_sensevoice(config, lang)
+        if provider == "qwen3":
+            _configure_qwen3(config, lang)
         elif provider == "volcengine":
             _configure_volcengine(config, lang)
 
@@ -228,8 +220,6 @@ def run_bootstrap(*, settings: Settings, interactive: bool = True) -> AppConfig:
             choices=default_choices,
             default=config.default_provider if config.default_provider in selected_providers else selected_providers[0],
         ).execute()
-    if config.default_provider == "whisper" and selected_whisper_model:
-        config.default_model = selected_whisper_model
 
     # ── Save and show next steps ─────────────────────────────
     config.save(settings)
@@ -259,41 +249,34 @@ def ensure_bootstrap(*, settings: Settings, allow_prompt: bool = True) -> AppCon
 # ── Provider configuration flows ─────────────────────────────
 
 
-def _configure_whisper(config: AppConfig, lang: str) -> str:
-    whisper_model = inquirer.select(
-        message=tr(lang, "bootstrap_whisper_model_prompt"),
-        choices=[
-            {"name": "tiny    — " + tr(lang, "whisper_model_tiny"), "value": "tiny"},
-            {"name": "base    — " + tr(lang, "whisper_model_base"), "value": "base"},
-            {"name": "small   — " + tr(lang, "whisper_model_small"), "value": "small"},
-            {"name": "medium  — " + tr(lang, "whisper_model_medium"), "value": "medium"},
-            {"name": "large   — " + tr(lang, "whisper_model_large"), "value": "large"},
-        ],
-        default=config.default_model if config.default_model in ("tiny", "base", "small", "medium", "large") else "small",
-    ).execute()
-    return whisper_model
+def _configure_qwen3(config: AppConfig, lang: str) -> None:
+    """配置 Qwen3-ASR(ONNX)本地引擎。
 
-
-def _configure_sensevoice(config: AppConfig, lang: str) -> None:
-    config.sensevoice.model_dir = inquirer.text(
-        message=tr(lang, "bootstrap_sensevoice_dir_prompt"),
-        default=config.sensevoice.model_dir,
+    模型不再"按名字下载"(原 whisper 那套 tiny/small/medium/large),而是**指向一个本地模型目录** ——
+    这样同一份模型可以被多个程序共用(比如语音输入与字幕转写用同一个 Qwen3-ASR)。
+    """
+    config.qwen3.model_dir = inquirer.text(
+        message=tr(lang, "bootstrap_qwen3_dir_prompt"),
+        default=config.qwen3.model_dir,
     ).execute().strip()
-    config.sensevoice.language = inquirer.select(
-        message=tr(lang, "bootstrap_sensevoice_lang_prompt"),
+    config.qwen3.vad_model = inquirer.text(
+        message=tr(lang, "bootstrap_qwen3_vad_prompt"),
+        default=config.qwen3.vad_model,
+    ).execute().strip()
+    threads_raw = inquirer.text(
+        message=tr(lang, "bootstrap_qwen3_threads_prompt"),
+        default=str(config.qwen3.num_threads),
+    ).execute().strip()
+    if threads_raw.isdigit():
+        config.qwen3.num_threads = int(threads_raw)
+    config.qwen3.provider = inquirer.select(
+        message=tr(lang, "bootstrap_qwen3_provider_prompt"),
         choices=[
-            {"name": "auto (" + tr(lang, "sensevoice_lang_auto") + ")", "value": "auto"},
-            {"name": "zh", "value": "zh"},
-            {"name": "en", "value": "en"},
-            {"name": "ja", "value": "ja"},
-            {"name": "ko", "value": "ko"},
-            {"name": "yue (Cantonese)", "value": "yue"},
+            {"name": "cpu", "value": "cpu"},
+            {"name": "cuda", "value": "cuda"},
+            {"name": "coreml", "value": "coreml"},
         ],
-        default=config.sensevoice.language,
-    ).execute()
-    config.sensevoice.use_itn = inquirer.confirm(
-        message=tr(lang, "bootstrap_sensevoice_itn_prompt"),
-        default=config.sensevoice.use_itn,
+        default=config.qwen3.provider if config.qwen3.provider in ("cpu", "cuda", "coreml") else "cpu",
     ).execute()
 
 

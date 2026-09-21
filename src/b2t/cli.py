@@ -162,19 +162,29 @@ def create_app(language: str = DEFAULT_LANGUAGE) -> typer.Typer:
         else:
             rows.insert(0, (tr(selected_language, "doctor_yt_dlp"), tr(selected_language, "status_ok")))
 
-        try:
-            import whisper  # noqa: F401
-        except ImportError:
-            rows.append((tr(selected_language, "doctor_whisper"), tr(selected_language, "status_missing")))
-        else:
-            rows.append((tr(selected_language, "doctor_whisper"), tr(selected_language, "status_ok")))
+        # 本地引擎不再是 Python 包,而是 sherpa-onnx 运行时(系统级依赖,如同 ffmpeg)
+        from b2t.transcribers.qwen3_local import BINARY_NAMES, FRONTEND_FILE
 
-        try:
-            import funasr_onnx  # noqa: F401
-        except ImportError:
-            rows.append((tr(selected_language, "doctor_sensevoice"), tr(selected_language, "status_missing")))
+        sherpa = next((shutil.which(name) for name in BINARY_NAMES if shutil.which(name)), None)
+        rows.append(
+            (
+                tr(selected_language, "doctor_sherpa"),
+                sherpa or tr(selected_language, "status_missing"),
+            )
+        )
+
+        config = AppConfig.load(Settings.from_workspace(workspace))
+        model_dir = config.qwen3.model_dir
+        model_status = tr(selected_language, "status_missing")
+        if model_dir and Path(model_dir).expanduser().is_dir() and (Path(model_dir).expanduser() / FRONTEND_FILE).exists():
+            model_status = tr(selected_language, "status_ok")
+        rows.append((tr(selected_language, "doctor_qwen3_model"), model_status))
+
+        if config.qwen3.vad_model and Path(config.qwen3.vad_model).expanduser().exists():
+            vad_status = tr(selected_language, "status_ok")
         else:
-            rows.append((tr(selected_language, "doctor_sensevoice"), tr(selected_language, "status_ok")))
+            vad_status = tr(selected_language, "status_missing")
+        rows.append((tr(selected_language, "doctor_vad"), vad_status))
 
         try:
             import requests  # noqa: F401

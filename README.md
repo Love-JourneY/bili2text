@@ -2,26 +2,45 @@
   <img src="assets/light_logo2.png" alt="bili2text logo" width="360" />
 </p>
 
-<p align="center">
-  <a href="README.en.md">English</a>
-  ·
-  <a href="CHANGELOG.md">更新日志</a>
-</p>
+> ## ⚠️ 这是改写版（fork）：运行时已被整体替换
+>
+> 本仓库是 [lanbinleo/bili2text](https://github.com/lanbinleo/bili2text) 的 fork。
+> **我们把底层的转写运行时整个换掉了** ——
+>
+> | | 上游原版 | **本 fork** |
+> |---|---|---|
+> | 本地引擎 | openai-whisper | **Qwen3-ASR（0.6B）** |
+> | 推理运行时 | **PyTorch + CUDA**（torch 2.11 + cu130） | **ONNX Runtime**（经 sherpa-onnx） |
+> | 实测 venv | **4.8 GB** | **约 100 MB**（不再需要 PyTorch） |
+> | 中文输出 | 繁简不稳、标点常缺/半角 | 稳定简体、全角标点 |
+> | 长音频 | Whisper 原生 30 秒窗口滚动 | **Silero VAD 自动切块** |
+> | 分段 | 单行大段落 | **每段一行，自带起止时间** |
+>
+> **两个本地引擎（whisper / sensevoice）及其 extras 已从本 fork 中移除。**
+> 所有依赖 PyTorch 的代码路径都不复存在 —— 这不是"多了一个选项"，而是**换掉了发动机**。
+>
+> 为什么换（都是实测数据，不是口味问题）：
+> 1. **运行时太重**：`--extra whisper` 会拉进整条 torch+CUDA 栈，venv 实测 **4.8 GB**。
+> 2. **中文输出不稳**：同一模型对某些视频会**整篇输出繁体且完全不打标点**
+>    （GPU/CPU 跑出来一模一样，不是设备问题）。
+> 3. **专名更容易错**：同一段音频，Whisper 把 `Anthropic` 听成 `Andropic`、
+>    把「分析代码」听成「分析带吗」；Qwen3-ASR 两处都对。
+> 4. **切块后反而更快**：675 秒音频整段一次喂 RTF 1.14 → **VAD 切块后 RTF 0.36**。
+>
+> 想用原版请回到上游仓库。
 
 <p align="center">
-  <img src="https://img.shields.io/badge/bilibili-视频转文字-fb7299?style=flat&logo=bilibili&logoColor=white" />
-  <img src="https://img.shields.io/github/stars/lanbinleo/bili2text?style=flat&logo=github&color=yellow" alt="Stars" />
-  <img src="https://img.shields.io/github/forks/lanbinleo/bili2text?style=flat&logo=github&color=blue" alt="Forks" />
-  <img src="https://img.shields.io/github/license/lanbinleo/bili2text?style=flat&color=green" alt="License" />
-  <img src="https://img.shields.io/github/v/release/lanbinleo/bili2text?style=flat&color=orange" alt="Release" />
-  <img src="https://img.shields.io/github/last-commit/lanbinleo/bili2text?style=flat&color=purple" alt="Last Commit" />
+  <img src="https://img.shields.io/badge/bilibili-视频转文字-fb7299?style=flat&logo=bilibili&color=white" />
+  <img src="https://img.shields.io/badge/runtime-ONNX%20%2F%20sherpa--onnx-4b8bbe" />
+  <img src="https://img.shields.io/badge/engine-Qwen3--ASR-5b8c5a" />
+  <img src="https://img.shields.io/github/license/lanbinleo/bili2text?style=flat&color=green" />
 </p>
 
-# bili2text
+# bili2text（Qwen3-ASR / ONNX 改写版）
 
 **bili2text** 是一个把 Bilibili 视频转成文字的命令行工具。
 
-贴一个 Bilibili 链接或 BV 号进去，它会自动下载视频、提取音频、跑语音识别，最后输出一份文字稿。支持多种转写引擎，可以在本地离线跑，也可以接云端服务。
+贴一个 Bilibili 链接或 BV 号进去，它会自动下载视频、提取音频、跑语音识别，最后输出一份文字稿。
 
 除了命令行，还附带了简单的 Web 界面和桌面窗口，方便不习惯终端的用户使用。
 
@@ -29,75 +48,66 @@
 
 *PS：这个是老的界面截图*
 
-## 支持的转写引擎
+## 转写引擎
 
 | 引擎 | 类型 | 说明 |
 | --- | --- | --- |
-| **Whisper** | 本地模型 | OpenAI 开源的语音识别模型，离线运行，通用性强 |
-| **SenseVoice** | 本地模型 | 阿里云开源本地语音识别模型，中文识别效果好 |
-| **火山引擎** | 云端 API | 字节跳动旗下的商用语音识别服务，识别很准很推荐 |
+| **Qwen3-ASR** | 本地模型（ONNX） | **默认**。走 sherpa-onnx + ONNX Runtime，不需要 PyTorch/CUDA。支持中英混说，长音频用 Silero VAD 自动切块。 |
+| **火山引擎** | 云端 API | 字节跳动的商用语音识别，需要凭据。 |
+
+> 上游的 Whisper / SenseVoice 两个本地引擎在本 fork 中**已移除**。
 
 ## 快速开始
 
+### 前置依赖
+
+- **Python 3.10–3.12** 和 [uv](https://docs.astral.sh/uv/)
+- **ffmpeg**（提取音频）
+- **sherpa-onnx**（推理运行时）—— 它是**系统级依赖**，不通过 pip 装：
+  ```bash
+  # Arch
+  sudo pacman -S sherpa-onnx
+  # 其他平台
+  pip install sherpa-onnx
+  ```
+- **Qwen3-ASR 模型目录**（含 `conv_frontend.onnx` / `encoder*.onnx` / `decoder*.onnx` / `tokenizer/`）
+- **Silero VAD 模型**（约 2 MB，长音频切块用）
+  ```bash
+  wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx
+  ```
+
 ### 安装
 
-需要 Python 3.10–3.12 和 [uv](https://docs.astral.sh/uv/)。
-
-`uv` 是一个现代化的 Python 包管理工具，速速扔掉你手中的 Conda、Anaconda、venv和pip吧！
-
 ```bash
-git clone https://github.com/lanbinleo/bili2text.git
+git clone https://github.com/Love-JourneY/bili2text.git
 cd bili2text
-uv sync
+uv sync --extra web      # 注意：没有 --extra whisper 了，那个 extra 已不存在
 ```
-
-这只会安装核心依赖。转写引擎和额外功能需要通过 extras 安装，比如要用 Whisper 和 Web 界面：
-
-```bash
-uv sync --extra whisper --extra web
-```
-
-可选的 extras：`whisper`、`sensevoice`、`volcengine`、`web`、`server`。可以暂时不用安装，详看下方的初始化文档。
 
 ### 初始化配置
-
-第一次运行时会自动弹出配置向导，也可以手动运行：
 
 ```bash
 uv run bili2text init
 ```
 
-向导会引导你选择语言、转写引擎和额外功能，最后告诉你需要运行什么安装命令。
+向导会让你填 **Qwen3-ASR 模型目录**、**Silero VAD 路径**、线程数与 onnxruntime provider。
 
 ### 转写视频
 
 ```bash
 uv run bili2text tx "https://www.bilibili.com/video/BV1kfDTBXEfu"
-```
-
-也可以传本地文件：
-
-```bash
+uv run bili2text tx "BV1kfDTBXEfu"
 uv run bili2text tx ./my-video.mp4
+uv run bili2text tx "BV1kfDTBXEfu" --model /path/to/qwen3-asr-model
 ```
 
-指定引擎和模型：
+### 环境自检
 
 ```bash
-uv run bili2text tx "BV1kfDTBXEfu" --provider whisper --model medium
+uv run bili2text doctor
 ```
 
-批量提交多条输入：
-
-```bash
-uv run bili2text batch "BV1kfDTBXEfu" "https://www.bilibili.com/video/BV1xx411c7XD"
-```
-
-也可以用文本文件，每行一个 BV、链接或本地文件路径：
-
-```bash
-uv run bili2text batch --file sources.txt
-```
+会逐项报告：`yt-dlp` / `ffmpeg` / **`sherpa-onnx`** / **`Qwen3-ASR 模型`** / **`Silero VAD`** / `requests`。
 
 ## 命令一览
 
@@ -112,25 +122,16 @@ uv run bili2text batch --file sources.txt
 | `bili2text doctor` | `diag` | 检查运行环境 |
 | `bili2text language` | `lang` | 切换界面语言 |
 
-```bash
-uv run bili2text --help
-```
+## 关于 ONNX 的 GPU 加速
 
-## Web 界面 & 服务模式
+`provider` 配置项会原样传给 onnxruntime，可选 **`cpu` / `cuda` / `coreml`**。
+**能加速，但需要带对应 EP 的 build**：
 
-启动 Web 界面（浏览器访问）：
-
-```bash
-uv run bili2text ui
-```
-
-以服务模式运行（适合 Docker 或局域网部署）：
-
-```bash
-uv run bili2text srv --host 0.0.0.0 --port 8000
-```
-
-*注意，项目暂时未对Docker或服务器类型的长时间运行做任何优化，请暂时使用本地端*
+- Arch：`onnxruntime-cpu`（默认）与 **`onnxruntime-cuda`** / `onnxruntime-opt-cuda` 是**不同包**，
+  想要 CUDA 就要装带 cuda 的那个（并与 sherpa-onnx 的链接一致）。
+- 其他平台：装 `onnxruntime-gpu`。
+- 注意 Qwen3-ASR 的解码器是**自回归**的，GPU 对它的收益不如对纯卷积/注意力模型那么线性；
+  长音频真正的提速来自 **VAD 切块**（实测 RTF 1.14 → 0.36）。
 
 ## 开发
 
@@ -139,7 +140,7 @@ uv run bili2text srv --host 0.0.0.0 --port 8000
 
 ## 许可证
 
-MIT License
+MIT License —— 继承自上游 [lanbinleo/bili2text](https://github.com/lanbinleo/bili2text)。
 
 ## 使用须知
 

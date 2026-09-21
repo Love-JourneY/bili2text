@@ -101,17 +101,9 @@ def test_sync_environment_for_config_uses_saved_provider_and_feature_selection(t
     assert calls == [["uv", "sync", "--extra", "sensevoice", "--extra", "volcengine", "--extra", "server"]]
 
 
-def test_run_bootstrap_updates_default_model_when_whisper_becomes_default(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    settings = Settings.from_workspace(tmp_path / ".b2t")
-    existing = AppConfig(
-        default_provider="volcengine",
-        default_model="bigmodel",
-        enabled_providers=["volcengine"],
-    )
-    existing.save(settings)
+def test_configure_qwen3_reads_prompts_into_config() -> None:
+    """Qwen3 引擎的配置向导应把 模型目录/VAD/线程/provider 写进 config.qwen3。"""
+    config = AppConfig()
 
     class StubPrompt:
         def __init__(self, value):
@@ -120,40 +112,14 @@ def test_run_bootstrap_updates_default_model_when_whisper_becomes_default(
         def execute(self):
             return self.value
 
-    select_values = iter(["zh-CN", "medium", "whisper"])
-    checkbox_values = iter([["whisper", "volcengine"], []])
-    confirm_values = iter([True, True])
-    secret_values = iter(["", "", ""])
-    text_values = iter(["volc.bigasr.auc_turbo", "bigmodel"])
+    text_values = iter(["/models/qwen3-asr", "/models/silero_vad.onnx", "6"])
+    select_values = iter(["cuda"])
+    bootstrap_module.inquirer.text = lambda **kwargs: StubPrompt(next(text_values))
+    bootstrap_module.inquirer.select = lambda **kwargs: StubPrompt(next(select_values))
 
-    monkeypatch.setattr(
-        bootstrap_module.inquirer,
-        "select",
-        lambda **kwargs: StubPrompt(next(select_values)),
-    )
-    monkeypatch.setattr(
-        bootstrap_module.inquirer,
-        "checkbox",
-        lambda **kwargs: StubPrompt(next(checkbox_values)),
-    )
-    monkeypatch.setattr(
-        bootstrap_module.inquirer,
-        "confirm",
-        lambda **kwargs: StubPrompt(next(confirm_values)),
-    )
-    monkeypatch.setattr(
-        bootstrap_module.inquirer,
-        "secret",
-        lambda **kwargs: StubPrompt(next(secret_values)),
-    )
-    monkeypatch.setattr(
-        bootstrap_module.inquirer,
-        "text",
-        lambda **kwargs: StubPrompt(next(text_values)),
-    )
-    monkeypatch.setattr(bootstrap_module, "_show_next_steps", lambda **kwargs: None)
+    bootstrap_module._configure_qwen3(config, "zh-CN")
 
-    updated = run_bootstrap(settings=settings, interactive=True)
-
-    assert updated.default_provider == "whisper"
-    assert updated.default_model == "medium"
+    assert config.qwen3.model_dir == "/models/qwen3-asr"
+    assert config.qwen3.vad_model == "/models/silero_vad.onnx"
+    assert config.qwen3.num_threads == 6
+    assert config.qwen3.provider == "cuda"
